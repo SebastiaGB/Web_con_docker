@@ -1,131 +1,113 @@
-# Blockstellart Bootcamp
-Este proyecto fue generado para el Bootcamp de AWS de **Joan Amengual**
-![ECS](./Images/Arquitectura%20ECS.jpg)
+# Proyecto: Despliegue de contenedores en AWS con ECS
 
-# Despliegue de VPC en AWS
+El objetivo del proyecto es, mediante **contenedores Docker**, subir aplicaciones a AWS y crear un sistema capaz de desplegarlas de forma **segura, escalable y automatizada**.
 
-1. Creación de VPC
-![VPC](./Images/VPC.jpg)
+Se utilizarán los siguientes recursos principales:
 
-Para hacer el [despliegue](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/02-setup/02-createaccount/01-stackdeploy) de la VPC puede utilizarse el archivo **vpc.yaml**. En este archivo se omite la parte de Cloud9.
+* **ECR**: repositorios de imágenes.
+* **ECS**: orquestador de contenedores.
+* **EC2 / Fargate**: ejecución de tareas.
+* **ALB**: balanceo de carga.
+* **VPC**: red privada (2 subredes públicas y 2 privadas).
+* **CloudWatch**: registros y métricas.
+* **Auto Scaling**: escalado automático de servicios y de la infraestructura.
 
-# Amazon ECR
+---
 
-#### Creación de repositorios
-Pueden seguirse los pasos tal cual estan en la documentación [oficial](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/03-ecr/create)
+## 1. Repositorios de imágenes (ECR)
+
+1. Se crean **3 repositorios en ECR**, uno por cada aplicación o servicio.
+2. Se construyen imágenes Docker localmente (`docker build`).
+3. Se suben al ECR con `docker push` utilizando credenciales de AWS.
+
+## 2. Cluster ECS
+
+* Se crea un **cluster ECS privado** dentro de la **VPC**.
+* Dos opciones de ejecución:
+
+  * **EC2 launch type**: se crean instancias EC2 que forman parte del cluster.
+  * **Fargate**: ejecución serverless sin necesidad de instancias EC2.
+
+> En este ejemplo: se utilizarán instancias **EC2** en subredes privadas para ejecutar los contenedores.
+
+---
+
+## 3. Definición de tareas (Task Definitions)
+
+Cada aplicación se define como una **Task Definition** que incluye:
+
+* Imagen de contenedor desde ECR.
+* Asignación de CPU y memoria.
+* Variables de entorno y configuración de puertos.
+* Uso del **driver awslogs** para enviar logs a CloudWatch.
+
+## 4. Servicios ECS
+
+* Se crean **servicios ECS** basados en las Task Definitions.
+* Cada servicio garantiza que siempre haya un número deseado de tareas en ejecución.
+* Se asocian a un **Target Group** del **Application Load Balancer (ALB)**.
+* Configuración del ALB:
+
+  * Listener en **HTTP (80)** o **HTTPS (443)**.
+  * Enruta tráfico al target group → tareas ECS.
+
+---
+
+## 5. Networking y seguridad
+
+* **VPC**: con 2 subnets públicas (ALB, NAT Gateway) y 2 privadas (ECS/EC2).
+* **Security groups**:
+
+  * ALB: permite tráfico entrante HTTP/HTTPS desde Internet.
+  * ECS/EC2: permite tráfico solo desde el ALB.
+* **IAM roles**:
+
+  * **Task execution role**: para descargar imágenes de ECR y enviar logs.
+  * **Task role**: para que el contenedor acceda a otros servicios AWS (si es necesario).
+
+---
+
+## 6. Autoescalado de servicios ECS
+
+* Se habilita **Service Auto Scaling** para cada servicio ECS.
+* Se configuran políticas de escalado basadas en métricas de **CloudWatch**.
+
+  * Ejemplo: escalar entre **2 y 10 tareas** según el uso de CPU > 70%.
 
 
-#### Construir imagenes de Docker
-Las carpetas; Cats, Dogs y Web contienen sus propios archivos de Docker utilizando los siguientes comandos:
+## 7. Autoescalado de infraestructura (EC2 Auto Scaling Group)
+
+Si se usa **EC2 launch type**:
+
+* Las instancias del cluster ECS están en un **Auto Scaling Group (ASG)**.
+* Se configura para que escale entre un mínimo y un máximo de instancias.
+* Métricas típicas:
+
+  * CPU media de las instancias.
+  * Capacidad reservada de ECS.
+* El escalado de EC2 se coordina con el de ECS para mantener capacidad suficiente.
+
+---
+
+## 8. Monitoreo y registros
+
+* Los logs de los contenedores se envían a **CloudWatch Logs**.
+* Se crean alarmas en **CloudWatch Alarms** para:
+
+  * Uso de CPU/Memory alto en las tareas.
+  * Estado de salud de las instancias EC2.
+  * Fallos en los targets del ALB.
+
+---
+
+## Arquitectura general
+
+```text
+Usuarios -> ALB (subred pública) -> Target Groups -> Servicios ECS -> Tareas (contenedores)
+                                                   |
+                                                   |-> Imágenes desde ECR
+                                                   |-> Logs hacia CloudWatch
+                                                   |-> Escalado automático (tareas / EC2)
 ```
-docker build -t cats .
-docker build -t dogs .
-docker build -t web .
-```
-#### Etiquetar y enviar imágenes a ECR
-Para este proceso puede utilizarse la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/03-ecr/push) original
 
-
-# Amazon ECS
-
-#### Creación de Cluster
-![ECS](./Images/ECS%20Cluster.jpg)
-La creación del cluster puede ser aplicada con el proceso de la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/01-cluster/create)
-
-#### Grupos de seguridad de clústeres
-Configurar los grupos de seguridad también puede ser aplicado tal como se menciona en la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/01-cluster/asg)
-
-#### Definición de tareas
-![ECSTareas](./Images/ECS%20Tareas.jpg)
-
-Para la creación de tareas puede ser siguiendo las instrucciones:
-1. Definición de [tarea web](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/02-taskdef/web)
-2. Definición de [tarea cats](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/02-taskdef/cats)
-3. Definición de [tarea dogs](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/02-taskdef/dogs)
-4. Modificar el [rol IAM](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/02-taskdef/iam) de la tarea ECS
-
-
-# Servicios ECS
-![ECSServicios](./Images/ECS%20Servicios.jpg)
-
-#### Creación de ALB y Servicios
-1. [Creación de ALB](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/03-service/alb) la documentación es la correcta.
-2. [Creación de Servicio Web](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/03-service/web)
-3. [Creación de Servicio Cats](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/03-service/cats)
-4. [Creación de Servicio Dogs](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/03-service/dogs)
-
-#### Validación de servicio
-Para verificar la funcionalidad de los servicios la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/04-ecs/check) muestra el proceso para confirmar el estatus de los servicios.
-
-
-# Monitoreo
-![Monitoreo](./Images/Monitoreo.jpg)
-
-#### Container Insights
-El proceso de monitorio funciona acorde a la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/05-monitoring/01-insights). Algunos cambios en la interfaz, como posiciones o ubicaciones de algunos opciones
-
-#### Log Routing
-Las consultas y visualización de la información funciona tal como se muestra en la [sección](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/05-monitoring/02-firelens)
-
-# Auto Scaling del Servicio
-
-#### Configurar el escalado automático del servicio
-Seguir el proceso de la configuración de escalado funciona acorde a la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/07-autoscale/01-service/config)
-
-
-#### Prueba de carga de servicio
-El proceso de auto scaling fue realizado desde de Cloud9 utilizando **siege**, sin embargo al no configurar lo desde el inicio hay otras alternativas:
-1. Crear una nueva instancia EC2 con una AMI de Amazon Linux 2 e instalar **siege** con los siguientes comandos:
-```
-sudo yum update -y
-sudo amazon-linux-extras install epel -y
-sudo yum install siege -y
-siege --version
-```
-
-y después ejecutar:
-```
-siege -c 200 -i http://<<url ALB>>/
-```
-y el proceso sería muy similar.
-**Nota:** La conexión puede ser desde instance connect o desde la linea de comandos de un equipo personal.
-
-2. Utilizar [Artillery](https://www.npmjs.com/package/artillery)
-
-```
-npm install -g artillery
-```
-Se debe crear un archivo .yaml con una configuración similar a:
-``` js
-config:
-  target: 'http://your-alb-dns-name/'
-  phases:
-    - duration: 60 # Duración en segundos
-      arrivalRate: 200 # Usuarios por segundo
-scenarios:
-  - flow:
-      - get:
-          url: "/"
-
-```
-
-**Nota:** Tenga encuenta que puede depender de la velocidad de internet y puede tener intermitencia o puede fallar el proceso mostrando un mensaje como: *errors.ETIMEDOUT*.
-
-
-#### Monitoreo
-El monitoreo funciona como se menciona en la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/07-autoscale/01-service/monitoring)
-
-
-# Auto Scaling del Cluster
-
-#### Capacity Provider
-La [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/07-autoscale/02-cluster/capacityprovider) funciona y muestra la información mencionada.
-
-#### Configurar grupo de autoescalado
-Puede ser utilizada la [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/07-autoscale/02-cluster/asg) proporcionada.
-
-#### Prueba de carga del clúster
-La prueba de carga del clúster puede ser realizada como se realizó para los servicios.
-
-#### Monitoreo
-La [documentación](https://catalog.us-east-1.prod.workshops.aws/workshops/8c9036a7-7564-434c-b558-3588754e21f5/en-US/03-console/07-autoscale/02-cluster/monitoring) proporciona el contenido necesario para realizar la actividad.
+---
