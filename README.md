@@ -13,4 +13,7 @@ Se utilizarán los siguientes recursos principales:
 * **Auto Scaling**: escalado automático de servicios y de la infraestructura.
 
 ---
+### Créditos
+Proyecto desarrollado como parte del bootcamp **AWS DevOps & Cloud Computing de Blockstellar**.
+
 
