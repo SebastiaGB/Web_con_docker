@@ -25,21 +25,21 @@ Cada una contiene una imagen de Docker, un archivo de configuración (.config) p
 Proyecto/
 ├── Dioses/
 │   ├── Dockerfile
-│   ├── .config
+│   ├── default.conf
 │   └── index.html
 │
 ├── Semidioses/
 │   ├── Dockerfile
-│   ├── .config
+│   ├── default.conf
 │   └── index.html
 │
 ├── WebApp/
 │   ├── Dockerfile
-│   ├── .config
+│   ├── default.conf
 │   ├── index.html
 │   └── Imagenes/
-│       ├── logo.png
-│       ├── banner.jpg
+│       ├── Dioses.avif
+│       ├── Semidioses.avif
 │       └── ...
 │
 └── README.md
