@@ -41,7 +41,7 @@ Proyecto/
 │       ├── Dioses.avif
 │       ├── Semidioses.avif
 │       └── ...
-│
+└── vpc.yaml
 └── README.md
 ```
 Para la implementación se utiliza una pila de AWS CloudFormation (proporcionada por el instructor), lo que permite desplegar la infraestructura como código siguiendo buenas prácticas. Esta plantilla crea la VPC, conformada por dos subredes privadas y dos públicas, además de los grupos de seguridad necesarios.
