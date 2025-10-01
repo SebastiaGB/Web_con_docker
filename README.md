@@ -46,6 +46,7 @@ Proyecto/
 ```
 Para la implementación se utiliza una pila de AWS CloudFormation (proporcionada por el instructor), lo que permite desplegar la infraestructura como código siguiendo buenas prácticas. Esta plantilla crea la VPC, conformada por dos subredes privadas y dos públicas, además de los grupos de seguridad necesarios.
 
+
 ### 1. Repositorios en Amazon ECR
 
 El primer paso consiste en configurar Amazon ECR, creando tres repositorios (uno por cada servicio) donde se subirán las imágenes de Docker.
@@ -56,6 +57,7 @@ Tener Docker instalado y en ejecución.
 Disponer de permisos de acceso a AWS.
 
 Generar un par de claves de acceso denominado LOCAL CLI, que permitirá autenticarse desde la consola, construir los contenedores y subir las imágenes.
+
 
 ### 2. Creación del cluster ECS
 
@@ -69,6 +71,7 @@ Lanzar dos instancias EC2 dentro de la VPC creada por CloudFormation, ubicándol
 
 Asociar las instancias al grupo de seguridad correspondiente.
 
+
 ### 3. Definición de tareas en ECS
 
 Se configuran tres task definitions, una para cada imagen subida a ECR. Cada tarea se define con los recursos mínimos de CPU y memoria necesarios. En este paso:
@@ -81,6 +84,7 @@ Se mapea el puerto 80/TCP, ya que se usará el protocolo HTTP.
 
 La tarea Dioses se ejecuta en Fargate, mientras que Semidioses y WebApp se ejecutan en EC2.
 
+
 ### 4. Servicios en ECS
 
 Se crean tres servicios en el cluster ECS para mantener y gestionar las tareas de forma continua. Cada servicio lanza 2 tareas de su definición correspondiente:
@@ -90,6 +94,7 @@ Dioses → EC2
 WebApp → EC2
 
 Semidioses → Fargate (requiere ubicarlo correctamente en las subredes privadas de la VPC).
+
 
 ### 5. Balanceador de carga (ALB)
 
@@ -101,7 +106,47 @@ Para Dioses y Semidioses se crean grupos de destino adicionales, cada uno con su
 
 En el caso de Fargate (Semidioses), es fundamental gestionar correctamente las redes para que las tareas se ubiquen en las subredes privadas de la VPC.
 
+
+### 6.Escalado de servicios
+
+Una vez desplegados los servicios, se configura el escalado automático de tareas en ECS:
+
+Se actualiza el servicio WebApp y se activa el escalado automático del servicio.
+
+Se definen valores mínimos y máximos de tareas, junto con una política de destino (ejemplo: escalar cuando el conteo de peticiones supere las 100 requests por target).
+
+El servicio actualiza automáticamente el número de tareas en función de las peticiones recibidas a través del ALB.
+
+Para simular la carga:
+
+Se crea una instancia EC2 adicional y se accede a ella mediante Session Manager (Instance Connect).
+
+Se instalan las librerías necesarias:
+
+    sudo amazon-linux-extras enable epel
+    sudo yum install -y siege
+
+Se ejecuta la prueba de carga:
+
+    siege -c 200 -i http://<DNS-ALB>
+
+Esto genera múltiples peticiones concurrentes al ALB y permite observar cómo las tareas del servicio WebApp aumentan automáticamente.
+
+
+### 7. Escalado de infraestructura
+
+Además del escalado de tareas, se configura el escalado automático de la infraestructura en el cluster ECS:
+
+Se actualiza el Capacity Provider de EC2 y se habilita el escalado administrado.
+
+Se establece la capacidad de destino en 100%.
+
+Se actualiza el servicio WebApp para que utilice la estrategia de capacity provider, garantizando que pueda escalar de forma resiliente cuando aumente el número de usuarios o peticiones.
+
+De esta manera, no solo escalan los servicios, sino también la infraestructura subyacente, asegurando que el cluster siempre disponga de instancias EC2 suficientes para soportar la carga.
+
 ---
+
 ## Créditos
 Proyecto desarrollado como parte del bootcamp **AWS DevOps & Cloud Computing de Blockstellar**.
 
